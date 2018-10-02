@@ -33,4 +33,4 @@
 
 build/
 deps/
-idea/
+.idea/

@@ -19,42 +19,102 @@
 #include "mgos_gpio.h"
 #include "mgos_mqtt.h"
 #include "mgos_sys_config.h"
-#include <algorithm>
-#include <vector>
 #include <string>
-#include <stdint.h>
 #include <sstream>
-#include <iostream>
 using namespace std;
 
-//SETUP SECTION
-static vector<uint16_t> relays;
-static uint8_t number_of_relays_to_control;
-
-void setup_switches()
+/*
+ * Handler to turn on relay
+ */
+void relay_on_handler(
+    struct mg_connection *c,
+    const char *topic,
+    int topic_len,
+    const char *msg,
+    int msg_len,
+    void *pin)
 {
-    istringstream string_relays(mgos_sys_config_get_bank_relay_pins());
-
-    string relay;
-
-    while (getline(string_relays, relay, ',')) {
-        int relay_pin_number;
-        istringstream convert(relay);
-        convert >> relay_pin_number;
-        mgos_gpio_set_mode(relay_pin_number, MGOS_GPIO_MODE_OUTPUT);
-        relays.push_back(relay_pin_number);
-    }
-
-    number_of_relays_to_control = relays.size();
+    (void)c;
+    (void)topic;
+    (void)topic_len;
+    (void)msg;
+    (void)msg_len;
+    int x = *(int *)pin;
+    mgos_gpio_write(x, true);
 }
 
-void setup()
+/*
+ * Handler to turn off relay
+ */
+void relay_off_handler(
+    struct mg_connection *c,
+    const char *topic,
+    int topic_len,
+    const char *msg,
+    int msg_len,
+    void *pin)
 {
-    setup_switches();
+    (void)c;
+    (void)topic;
+    (void)topic_len;
+    (void)msg;
+    (void)msg_len;
+    int x = *(int *)pin;
+    mgos_gpio_write(x, false);
 }
 
+/*
+ * Subscribes to on and off topics for the particular pin.
+ */
+void subscribe_to_topics(int *alias, int *pin)
+{
+    //on topic
+    stringstream ss;
+    ss << "devices/switch/on/" << *alias;
+    mgos_mqtt_sub(ss.str().c_str(), relay_on_handler, (void*)pin);
+
+    //off topic
+    ss.str("");
+    ss << "devices/switch/off/" << *alias;
+    mgos_mqtt_sub(ss.str().c_str(), relay_off_handler, (void*)pin);
+
+}
+
+/*
+ * Gets the output pin from the string parameter.
+ */
+uint16_t get_output_pin(string relay_pin_number)
+{
+    uint16_t pin;
+    istringstream convert(relay_pin_number);
+    convert >> pin;
+    return pin;
+}
+
+/*
+ * Sets pin to output mode and turns it off.
+ */
+void set_output_pin(int *pin)
+{
+    mgos_gpio_set_mode(*pin, MGOS_GPIO_MODE_OUTPUT);
+    mgos_gpio_write(*pin, false);
+}
+
+/*
+ * Main method called by mongoose os.
+ * Sets the pins up.
+ */
 enum mgos_app_init_result mgos_app_init(void)
 {
-    setup();
+    istringstream string_relays(mgos_sys_config_get_bank_relay_pins());
+    string relay_pin_number;
+    for (int tracker=1; getline(string_relays, relay_pin_number, ','); tracker++)
+    {
+        int *pin = new int(get_output_pin(relay_pin_number));
+        int *alias = new int(tracker);
+        set_output_pin(pin);
+        subscribe_to_topics(alias, pin);
+    }
+
     return MGOS_APP_INIT_SUCCESS;
 }
