@@ -19,9 +19,24 @@
 #include "mgos_gpio.h"
 #include "mgos_mqtt.h"
 #include "mgos_sys_config.h"
+#include "Relay.h"
 #include <string>
 #include <sstream>
 using namespace std;
+
+int string_to_int(string string_number)
+{
+    int number;
+    istringstream convert(string_number);
+    convert >> number;
+    return number;
+}
+
+static void relay_off_cb(void *relay) {
+    Relay *r = (Relay *)relay;
+    mgos_gpio_write(r->pin, false);
+    mgos_clear_timer(r->timer);
+}
 
 /*
  * Handler to turn on relay
@@ -32,15 +47,24 @@ void relay_on_handler(
     int topic_len,
     const char *msg,
     int msg_len,
-    void *pin)
+    void *relay)
 {
     (void)c;
     (void)topic;
     (void)topic_len;
-    (void)msg;
-    (void)msg_len;
-    int x = *(int *)pin;
-    mgos_gpio_write(x, true);
+
+    Relay *r = (Relay *)relay;
+    mgos_gpio_write(r->pin, true);
+    mgos_clear_timer(r->timer);
+
+    if(msg_len > 0)
+    {
+        int length = string_to_int(msg);
+        if(length > 200)
+        {
+            r->timer = mgos_set_timer(length,MGOS_TIMER_REPEAT,relay_off_cb,relay);
+        }
+    }
 }
 
 /*
@@ -52,52 +76,42 @@ void relay_off_handler(
     int topic_len,
     const char *msg,
     int msg_len,
-    void *pin)
+    void *relay)
 {
     (void)c;
     (void)topic;
     (void)topic_len;
     (void)msg;
     (void)msg_len;
-    int x = *(int *)pin;
-    mgos_gpio_write(x, false);
+    Relay *r = (Relay *)relay;
+    mgos_gpio_write(r->pin, false);
 }
 
 /*
  * Subscribes to on and off topics for the particular pin.
  */
-void subscribe_to_topics(int *alias, int *pin)
+void subscribe_to_topics(Relay *relay)
 {
     //on topic
     stringstream ss;
-    ss << "devices/switch/on/" << *alias;
-    mgos_mqtt_sub(ss.str().c_str(), relay_on_handler, (void*)pin);
+    ss << "devices/switch/on/" << relay->alias;
+    mgos_mqtt_sub(ss.str().c_str(), relay_on_handler, (void*)relay);
 
     //off topic
     ss.str("");
-    ss << "devices/switch/off/" << *alias;
-    mgos_mqtt_sub(ss.str().c_str(), relay_off_handler, (void*)pin);
-
+    ss << "devices/switch/off/" << relay->alias;
+    mgos_mqtt_sub(ss.str().c_str(), relay_off_handler, (void*)relay);
 }
 
-/*
- * Gets the output pin from the string parameter.
- */
-uint16_t get_output_pin(string relay_pin_number)
-{
-    uint16_t pin;
-    istringstream convert(relay_pin_number);
-    convert >> pin;
-    return pin;
-}
+
 
 /*
  * Sets pin to output mode and turns it off.
  */
-void set_output_pin(int *pin)
+void set_output_pin(uint16_t pin)
 {
-    mgos_gpio_set_mode(*pin, MGOS_GPIO_MODE_OUTPUT);
-    mgos_gpio_write(*pin, false);
+    mgos_gpio_set_mode(pin, MGOS_GPIO_MODE_OUTPUT);
+    mgos_gpio_write(pin, false);
 }
 
 /*
@@ -108,12 +122,14 @@ enum mgos_app_init_result mgos_app_init(void)
 {
     istringstream string_relays(mgos_sys_config_get_bank_relay_pins());
     string relay_pin_number;
-    for (int tracker=1; getline(string_relays, relay_pin_number, ','); tracker++)
+    for (uint16_t tracker = 1; getline(string_relays, relay_pin_number, ','); tracker++)
     {
-        int *pin = new int(get_output_pin(relay_pin_number));
-        int *alias = new int(tracker);
-        set_output_pin(pin);
-        subscribe_to_topics(alias, pin);
+        Relay *relay = new Relay();
+        relay->pin = string_to_int(relay_pin_number);
+        relay->alias = tracker;
+
+        set_output_pin(relay->pin);
+        subscribe_to_topics(relay);
     }
 
     return MGOS_APP_INIT_SUCCESS;

@@ -1,12 +1,11 @@
 # bank
-## About
 A mongoose os application to control a bank of relays.
 
 Change the bank.relay_pins value to define the pins that are going to be used for relay control. The order of pins
 defines the alias and the alias is used in the topic to turn on and off the relays.  
 EG
 ```json
-["bank.relay_pins", "s", "5,4,0,2", {title: "Array of pins associated to each switch"}]
+["bank.relay_pins", "s", "5,4,0,2", {"title": "Array of pins associated to each relay"}]
 ```
 alias '1' = pin 5, alias '2' = pin 4 and so on.
 
