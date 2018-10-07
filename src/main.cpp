@@ -24,6 +24,9 @@
 #include <sstream>
 using namespace std;
 
+/*
+ * Convert a string to an int.
+ */
 int string_to_int(string string_number)
 {
     int number;
@@ -32,14 +35,30 @@ int string_to_int(string string_number)
     return number;
 }
 
-static void relay_off_cb(void *relay) {
-    Relay *r = (Relay *)relay;
-    mgos_gpio_write(r->pin, false);
-    mgos_clear_timer(r->timer);
+/*
+ * Clear time and reset timer number
+ */
+void clear_timer(Relay *relay)
+{
+    if(r->timer != -1)
+    {
+        mgos_clear_timer(r->timer);
+        r->timer = -1;
+    }
 }
 
 /*
- * Handler to turn on relay
+ * Callback for relay off
+ */
+void relay_off_cb(void *relay)
+{
+    Relay *r = (Relay *)relay;
+    mgos_gpio_write(r->pin, false);
+    clear_timer(r);
+}
+
+/*
+ * Handler to turn on relay.
  */
 void relay_on_handler(
     struct mg_connection *c,
@@ -55,7 +74,7 @@ void relay_on_handler(
 
     Relay *r = (Relay *)relay;
     mgos_gpio_write(r->pin, true);
-    mgos_clear_timer(r->timer);
+    clear_timer(r);
 
     if(msg_len > 0)
     {
@@ -102,8 +121,6 @@ void subscribe_to_topics(Relay *relay)
     ss << "devices/switch/off/" << relay->alias;
     mgos_mqtt_sub(ss.str().c_str(), relay_off_handler, (void*)relay);
 }
-
-
 
 /*
  * Sets pin to output mode and turns it off.
