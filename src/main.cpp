@@ -40,10 +40,10 @@ int string_to_int(string string_number)
  */
 void clear_timer(Relay *relay)
 {
-    if(r->timer != -1)
+    if(relay->timer != -1)
     {
-        mgos_clear_timer(r->timer);
-        r->timer = -1;
+        mgos_clear_timer(relay->timer);
+        relay->timer = -1;
     }
 }
 
